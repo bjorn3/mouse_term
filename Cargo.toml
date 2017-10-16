@@ -1,0 +1,6 @@
+[package]
+authors = ["bjorn3 <bjorn3@users.noreply.github.com>"]
+name = "mouse_readline"
+version = "0.1.0"
+[dependencies]
+termion = "*"
