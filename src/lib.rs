@@ -3,8 +3,8 @@ extern crate termion;
 use std::io;
 use std::io::prelude::*;
 use termion::raw::IntoRawMode;
-use termion::input::TermRead;
-use termion::event::{Event, Key};
+use termion::input::{TermRead, MouseTerminal};
+use termion::event::{Event, Key, MouseEvent, MouseButton};
 use termion::cursor;
 use termion::color::*;
 
@@ -23,10 +23,11 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
         stdout.flush().unwrap();
     }
 
+    let mut log_file = ::std::fs::OpenOptions::new().write(true).open("abc.txt").unwrap();
     let mut buf = " ".to_string(); // Space to show cursor even when at the end
     let mut loc = 0;
     let stdin = io::stdin();
-    let mut stdout = io::stdout().into_raw_mode().unwrap();
+    let mut stdout: MouseTerminal<_> = io::stdout().into_raw_mode().unwrap().into();
     print(&mut stdout, prompt, &buf, loc);
 
     for event in stdin.events() {
@@ -60,6 +61,24 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
                     panic!();
                 }
             },
+            Event::Mouse(mouse) => {
+                match mouse {
+                    MouseEvent::Press(MouseButton::Left, x, y) => {
+                        write!(log_file, "{} {}\n", x, y).unwrap();
+                        if (x as usize) < prompt.len() {
+                            loc = 0;
+                        } else {
+                            loc = x as usize - prompt.len() - 1;
+                            if loc > buf.len() {
+                                loc = buf.len() - 1;
+                            }
+                        }
+                    }
+                    MouseEvent::Press(_, _, _) => {}
+                    MouseEvent::Release(_, _) => {}
+                    MouseEvent::Hold(_, _) => {}
+                }
+            }
             _ => {
                 ::std::mem::drop(stdout);
                 panic!();
