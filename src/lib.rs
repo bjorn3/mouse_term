@@ -9,28 +9,34 @@ use termion::cursor;
 use termion::color::*;
 
 pub fn read_line(prompt: &str) -> io::Result<String> {
-    fn print<W: Write>(stdout: &mut W, prompt: &str, buf: &str, loc: usize) {
-        write!(stdout, "\r{}{}{}", ::termion::clear::CurrentLine, prompt, cursor::Hide).unwrap();
-        for (i, chr) in buf.chars().enumerate() {
+    fn print<W: Write>(stdout: &mut W, prompt: &str, buf: &str, loc: usize, msg: &str) -> io::Result<()> {
+        use termion::clear;
+        write!(stdout, "\r{}{}{}", clear::CurrentLine, prompt, cursor::Hide)?;
+        for (i, chr) in buf.chars()
+            .chain(Some(' ')) // Space to show cursor even when at the end
+            .enumerate() {
             if i == loc {
-                write!(stdout, "{}{}", Fg(Black), Bg(White)).unwrap();
+                write!(stdout, "{}{}", Fg(Black), Bg(White))?;
             }
-            write!(stdout, "{}", chr).unwrap();
+            write!(stdout, "{}", chr)?;
             if i == loc {
-                write!(stdout, "{}{}", Fg(Reset), Bg(Reset)).unwrap();
+                write!(stdout, "{}{}", Fg(Reset), Bg(Reset))?;
             }
         }
-        stdout.flush().unwrap();
+        write!(stdout, "\t\t{}{}{}", Fg(Yellow), msg, Fg(Reset))?;
+        stdout.flush()
     }
 
     let mut log_file = ::std::fs::OpenOptions::new().write(true).open("abc.txt").unwrap();
-    let mut buf = " ".to_string(); // Space to show cursor even when at the end
+    let mut buf = String::new();
     let mut loc = 0;
+    let mut msg;
     let stdin = io::stdin();
     let mut stdout: MouseTerminal<_> = io::stdout().into_raw_mode().unwrap().into();
-    print(&mut stdout, prompt, &buf, loc);
+    print(&mut stdout, prompt, &buf, loc, "").unwrap();
 
     for event in stdin.events() {
+        msg = "";
         let event = event?;
         match event {
             Event::Key(key) => match key {
@@ -46,15 +52,29 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
                         loc -= 1;
                     }
                 }
+                Key::Delete => {
+                    if loc != buf.len() {
+                        buf.remove(loc);
+                    }
+                }
+                Key::Home => {
+                    loc = 0;
+                }
+                Key::End => {
+                    loc = buf.len();
+                }
                 Key::Left => {
                     if loc > 0 {
                         loc -= 1;
                     }
                 }
                 Key::Right => {
-                    if loc < buf.len() - 1 {
+                    if loc < buf.len() {
                         loc += 1;
                     }
+                }
+                Key::Insert => {
+                    msg = "Insert key is not supported";
                 }
                 _ => {
                     ::std::mem::drop(stdout);
@@ -70,11 +90,13 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
                         } else {
                             loc = x as usize - prompt.len() - 1;
                             if loc > buf.len() {
-                                loc = buf.len() - 1;
+                                loc = buf.len();
                             }
                         }
                     }
-                    MouseEvent::Press(_, _, _) => {}
+                    MouseEvent::Press(_, _, _) => {
+                        msg = "Mouse button is not supported";
+                    }
                     MouseEvent::Release(_, _) => {}
                     MouseEvent::Hold(_, _) => {}
                 }
@@ -84,11 +106,10 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
                 panic!();
             }
         }
-        print(&mut stdout, prompt, &buf, loc);
+        print(&mut stdout, prompt, &buf, loc, msg).unwrap();
         stdout.flush().unwrap();
         if let Event::Key(Key::Char('\n')) = event {
-            write!(stdout, "\n\r{}", cursor::Show).unwrap();
-            buf.pop(); // Remove trailing space
+            write!(stdout, "\r\n{}", cursor::Show).unwrap();
             return Ok(buf);
         }
     }
