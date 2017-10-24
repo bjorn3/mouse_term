@@ -27,7 +27,7 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
         stdout.flush()
     }
 
-    let mut log_file = ::std::fs::OpenOptions::new().write(true).open("abc.txt").unwrap();
+    //let mut log_file = ::std::fs::OpenOptions::new().write(true).open("abc.txt").unwrap();
     let mut buf = String::new();
     let mut loc = 0;
     let mut msg;
@@ -40,6 +40,7 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
         let event = event?;
         match event {
             Event::Key(key) => match key {
+                Key::Ctrl('c') => {} // Handled at the end of this function
                 Key::Char(c) => {
                     if c != '\n'{
                         buf.insert(loc, c);
@@ -83,15 +84,15 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
             },
             Event::Mouse(mouse) => {
                 match mouse {
-                    MouseEvent::Press(MouseButton::Left, x, y) => {
-                        write!(log_file, "{} {}\n", x, y).unwrap();
+                    MouseEvent::Press(MouseButton::Left, x, _y) => {
+                        //write!(log_file, "{} {}\n", x, y).unwrap();
+                        let new_loc = ||x as usize - prompt.len() - 1;
                         if (x as usize) < prompt.len() {
                             loc = 0;
+                        } else if new_loc() > buf.len() {
+                            loc = buf.len();
                         } else {
-                            loc = x as usize - prompt.len() - 1;
-                            if loc > buf.len() {
-                                loc = buf.len();
-                            }
+                            loc = new_loc();
                         }
                     }
                     MouseEvent::Press(_, _, _) => {
@@ -106,11 +107,19 @@ pub fn read_line(prompt: &str) -> io::Result<String> {
                 panic!();
             }
         }
-        print(&mut stdout, prompt, &buf, loc, msg).unwrap();
-        stdout.flush().unwrap();
-        if let Event::Key(Key::Char('\n')) = event {
-            write!(stdout, "\r\n{}", cursor::Show).unwrap();
-            return Ok(buf);
+
+        match event {
+            Event::Key(Key::Char('\n')) => {
+                print(&mut stdout, prompt, &buf, ::std::usize::MAX, msg).unwrap();
+                write!(stdout, "\r\n{}", cursor::Show).unwrap();
+                return Ok(buf);
+            }
+            Event::Key(Key::Ctrl('c')) => {
+                print(&mut stdout, prompt, &buf, ::std::usize::MAX, msg).unwrap();
+                write!(stdout, "\r\n")?;
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "User pressed ctrl-C"));
+            }
+            _ => print(&mut stdout, prompt, &buf, loc, msg).unwrap(),
         }
     }
     unreachable!();
